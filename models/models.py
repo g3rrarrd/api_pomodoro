@@ -33,14 +33,14 @@ class Pomodoro(Base):
     
     id_pomodoro = Column(Integer, primary_key=True, autoincrement=True, index=True)
     id_sesion = Column(Integer, ForeignKey('sesiones.id_sesion', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-    duracion_actividad = Column(Integer, nullable=False)  # minutos activos
-    duracion_descanso = Column(Integer, nullable=False)   # minutos de descanso
+    duracion_actividad = Column(Integer, nullable=False) 
+    duracion_descanso = Column(Integer, nullable=False)   
     inicio = Column(DateTime(timezone=True), nullable=False)
     fin = Column(DateTime(timezone=True), nullable=True)
     estado = Column(String(20), default='en_progreso')
     minutos_completados = Column(Integer, default=0)
     
-    # Restricción CHECK para estado
+
     __table_args__ = (
         CheckConstraint(
             "estado IN ('completado', 'cancelado', 'en_progreso')", 

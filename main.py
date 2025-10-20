@@ -1,8 +1,6 @@
-# app/main.py (versión con limpieza)
 import sys
 import os
 
-# Agregar el directorio actual al path para imports absolutos
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI

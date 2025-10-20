@@ -1,10 +1,9 @@
-# app/routers/routers.py
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timezone
 
-# Usar imports absolutos
 from utils.database import get_db
 from models.models import Usuario, Sesion, Pomodoro
 
@@ -281,7 +280,7 @@ def listar_pomodoros_sesion(id_sesion: int, db: Session = Depends(get_db)):
 @router.get("/estadisticas/usuario/{id_usuario}")
 def obtener_estadisticas_usuario(id_usuario: int, db: Session = Depends(get_db)):
     try:
-        from sqlalchemy import func  # Importar func desde sqlalchemy
+        from sqlalchemy import func 
         
         # Total de minutos por usuario
         total_minutos = db.query(
