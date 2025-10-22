@@ -191,7 +191,8 @@ def iniciar_pomodoro(
     event_type: str = "focus",
     planned_duration: int = 25,
     notes: str = None,
-    db: Session = Depends(get_db)):
+    db: Session = Depends(get_db)
+):
     try:
         
         sesion = db.query(Sesion).filter(Sesion.id_session == id_session).first()
