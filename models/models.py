@@ -59,17 +59,13 @@ class Pomodoro(Base):
     id_pomodoro_type = Column(Integer, ForeignKey('tbl_pomodoro_types.id_pomodoro_type', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
     event_type = Column(String(20), nullable=False) 
     planned_duration = Column(Integer, nullable=False)
-    pomodoro_start = Column(DateTime(timezone=True), nullable=False)
-    pomodoro_end = Column(DateTime(timezone=True), nullable=True)
-    duration = Column(Integer, default=0)  
-    is_completed = Column(Boolean, default=False) 
+    is_completed = Column(Boolean, default=False)
     notes = Column(Text, nullable=True)
     created_date = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Restricción CHECK para event_type
     __table_args__ = (
         CheckConstraint(
-            "event_type IN ('focus', 'break', 'pause')", 
+            "event_type IN ('focus', 'break')", 
             name='ck_pomodoro_event_type'
         ),
     )

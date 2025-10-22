@@ -8,6 +8,8 @@ from utils.database import engine, Base
 from models.models import Usuario, Sesion, Pomodoro, PomodoroRule, PomodoroType, PauseTracker
 from routers.routers import router
 
+Base.metadata.drop_all(bind=engine)
+
 ### Crear las tablas en la base de datos si no existen
 Base.metadata.create_all(bind=engine)
 
@@ -23,7 +25,7 @@ app.include_router(router)
 def read_root():
     return {
         "message": "Bienvenido a Pomodoro API",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "description": "Sistema de productividad con técnica Pomodoro"
     }
 
@@ -39,7 +41,7 @@ def health_check():
 def get_info():
     return {
         "name": "Pomodoro API",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "models": [
             "Usuario", "Sesion", "Pomodoro", 
             "PomodoroRule", "PomodoroType", "PauseTracker"

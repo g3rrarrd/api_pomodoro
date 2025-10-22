@@ -137,29 +137,6 @@ def listar_sesiones_usuario(id_user: int, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener sesiones: {str(e)}")
 
-@router.put("/sesiones/{id_session}/total_focus")
-def actualizar_total_focus(id_session: int, minutos: int, db: Session = Depends(get_db)):
-    try:
-        sesion = db.query(Sesion).filter(Sesion.id_session == id_session).first()
-        if not sesion:
-            raise HTTPException(status_code=404, detail="Sesión no encontrada")
-        
-        sesion.total_focus_minutes += minutos
-        db.commit()
-        
-        return {
-            "message": "Total de minutos de foco actualizado exitosamente",
-            "id_session": sesion.id_session,
-            "total_focus_minutes": sesion.total_focus_minutes
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al actualizar total de foco: {str(e)}")
-
-@router.put("/sesiones/{id_session}/total_break")
-def actualizar_total_break(id_session: int, minutos: int, db: Session = Depends(get_db)):
     try:
         sesion = db.query(Sesion).filter(Sesion.id_session == id_session).first()
         if not sesion:
@@ -219,7 +196,6 @@ def iniciar_pomodoro(
             id_pomodoro_type=id_pomodoro_type,
             event_type=event_type,
             planned_duration=planned_duration,
-            pomodoro_start=datetime.now(timezone.utc),
             notes=notes,
             is_completed=False
         )
@@ -234,7 +210,6 @@ def iniciar_pomodoro(
                 "id_session": nuevo_pomodoro.id_session,
                 "event_type": nuevo_pomodoro.event_type,
                 "planned_duration": nuevo_pomodoro.planned_duration,
-                "pomodoro_start": nuevo_pomodoro.pomodoro_start,
                 "is_completed": nuevo_pomodoro.is_completed,
                 "created_date": nuevo_pomodoro.created_date
             }
@@ -255,21 +230,15 @@ def completar_pomodoro(id_pomodoro_detail: int, db: Session = Depends(get_db)):
         if pomodoro.is_completed:
             raise HTTPException(status_code=400, detail="El pomodoro ya está completado")
         
-        tiempo_actual = datetime.now(timezone.utc)
-        tiempo_transcurrido = tiempo_actual - pomodoro.pomodoro_start
-        duracion_real = int(tiempo_transcurrido.total_seconds() / 60)
-        
         pomodoro.is_completed = True
-        pomodoro.pomodoro_end = tiempo_actual
-        pomodoro.duration = duracion_real
         
         sesion = db.query(Sesion).filter(Sesion.id_session == pomodoro.id_session).first()
         if pomodoro.event_type == "focus":
-            sesion.total_focus_minutes += duracion_real
+            sesion.total_focus_minutes += pomodoro.planned_duration
         elif pomodoro.event_type == "break":
-            sesion.total_break_minutes += duracion_real
+            sesion.total_break_minutes += pomodoro.planned_duration
         elif pomodoro.event_type == "pause":
-            sesion.total_pause_minutes += duracion_real
+            sesion.total_pause_minutes += pomodoro.planned_duration
         
         db.commit()
         
@@ -279,9 +248,6 @@ def completar_pomodoro(id_pomodoro_detail: int, db: Session = Depends(get_db)):
                 "id_pomodoro_detail": pomodoro.id_pomodoro_detail,
                 "event_type": pomodoro.event_type,
                 "planned_duration": pomodoro.planned_duration,
-                "actual_duration": pomodoro.duration,
-                "pomodoro_start": pomodoro.pomodoro_start,
-                "pomodoro_end": pomodoro.pomodoro_end,
                 "is_completed": pomodoro.is_completed
             }
         }
@@ -301,9 +267,6 @@ def listar_pomodoros_sesion(id_session: int, db: Session = Depends(get_db)):
             "id_pomodoro_type": p.id_pomodoro_type,
             "event_type": p.event_type,
             "planned_duration": p.planned_duration,
-            "actual_duration": p.duration,
-            "pomodoro_start": p.pomodoro_start,
-            "pomodoro_end": p.pomodoro_end,
             "is_completed": p.is_completed,
             "notes": p.notes,
             "created_date": p.created_date
