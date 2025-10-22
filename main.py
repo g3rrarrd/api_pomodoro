@@ -7,6 +7,12 @@ from fastapi import FastAPI
 from utils.database import engine, Base
 from models.models import Usuario, Sesion, Pomodoro, PomodoroRule, PomodoroType, PauseTracker
 from routers.routers import router
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+load_dotenv()
+
+origins = os.getenv("ALLOWED_ORIGINS", "")
 
 Base.metadata.drop_all(bind=engine)
 
@@ -20,6 +26,14 @@ app = FastAPI(
 )
 
 app.include_router(router)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def read_root():
