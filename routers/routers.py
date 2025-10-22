@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
 from datetime import datetime, timezone
+from schemas.shemas import UsuarioInput, UsuarioOutput, UsuarioResponse
 
 from utils.database import get_db
 from models.models import Usuario, Sesion, Pomodoro, PomodoroRule, PomodoroType, PauseTracker
@@ -13,10 +14,11 @@ router = APIRouter()
 # ENDPOINTS PARA USUARIOS
 # ============================================================
 
-@router.post("/usuarios/")
-def crear_usuario(nickname: str, db: Session = Depends(get_db)):
+@router.post("/usuarios/", response_model=UsuarioResponse)
+def crear_usuario(data: UsuarioInput, db: Session = Depends(get_db)):
     try:
-        
+        nickname = data.nickname
+
         usuario_existente = db.query(Usuario).filter(Usuario.nickname == nickname).first()
         if usuario_existente:
             raise HTTPException(status_code=400, detail="El nickname ya está registrado")
@@ -28,11 +30,7 @@ def crear_usuario(nickname: str, db: Session = Depends(get_db)):
         
         return {
             "message": "Usuario creado exitosamente",
-            "usuario": {
-                "id_user": nuevo_usuario.id_user,
-                "nickname": nuevo_usuario.nickname,
-                "created_date": nuevo_usuario.created_date
-            }
+            "usuario": nuevo_usuario
         }
     except HTTPException:
         raise
