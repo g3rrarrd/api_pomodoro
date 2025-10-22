@@ -28,10 +28,12 @@ def crear_usuario(data: UsuarioInput, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(nuevo_usuario)
         
-        return {
-            "message": "Usuario creado exitosamente",
-            "usuario": nuevo_usuario
-        }
+        return UsuarioResponse(
+            message="Usuario creado exitosamente",
+            usuario=UsuarioOutput.model_validate(nuevo_usuario, from_attributes=True)
+        )
+
+
     except HTTPException:
         raise
     except Exception as e:
