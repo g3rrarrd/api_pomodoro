@@ -1,0 +1,15 @@
+# Crear imagen en docker
+docker buildx build --platform linux/amd64 -t pomodoro-api:latest . --load
+
+# Correr en el contenedor de docker
+docker run -d -p 8000:8000 --name pomodoro-contaier --env-file .env pomodoro-api:latest
+
+# Para implementar en el azure container registry
+az login
+az acr login --name acrpomodoro
+
+docker tag pomodoro-api:latest acrpomodoro.azurecr.io/pomodoro-api:latest
+docker tag pomodoro-api:latest acrpomodoro.azurecr.io/pomodoro-api:0.4.1
+
+docker push acrpomodoro.azurecr.io/pomodoro-api:latest
+docker push acrpomodoro.azurecr.io/pomodoro-api:0.4.1
