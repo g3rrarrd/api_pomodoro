@@ -18,7 +18,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="Pomodoro API",
     description="API para gestión de técnica Pomodoro con seguimiento detallado",
-    version="0.4.1"
+    version="0.5.0"
 )
 
 app.include_router(router)
@@ -27,7 +27,7 @@ app.include_router(router)
 def read_root():
     return {
         "message": "Bienvenido a Pomodoro API",
-        "version": "0.4.1",
+        "version": "0.5.0",
         "description": "Sistema de productividad con técnica Pomodoro"
     }
 
@@ -43,7 +43,7 @@ def health_check():
 def get_info():
     return {
         "name": "Pomodoro API",
-        "version": "0.4.1",
+        "version": "0.5.0",
         "models": [
             "Usuario", "Sesion", "Pomodoro", 
             "PomodoroRule", "PomodoroType", "PauseTracker"

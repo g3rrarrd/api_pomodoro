@@ -661,6 +661,168 @@ def listar_pomodoros_sesion(id_session: int, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener pomodoros: {str(e)}")
 
+@router.get("/pomodoros/sesion/{id_session}/completo")
+def listar_pomodoros_sesion_completo(id_session: int, db: Session = Depends(get_db)):
+    """
+    Retorna todos los pomodoros de una sesión con información completa
+    incluyendo datos de reglas y tipos
+    """
+    try:
+        # Verificar que la sesión existe
+        sesion = db.query(Sesion).filter(Sesion.id_session == id_session).first()
+        if not sesion:
+            raise HTTPException(status_code=404, detail="Sesión no encontrada")
+        
+        # Obtener pomodoros con joins para incluir reglas y tipos
+        pomodoros = db.query(
+            Pomodoro,
+            PomodoroRule,
+            PomodoroType
+        ).join(
+            PomodoroRule, Pomodoro.id_pomodoro_rule == PomodoroRule.id_pomodoro_rule
+        ).join(
+            PomodoroType, Pomodoro.id_pomodoro_type == PomodoroType.id_pomodoro_type
+        ).filter(
+            Pomodoro.id_session == id_session
+        ).all()
+        
+        resultado = []
+        for pomodoro, regla, tipo in pomodoros:
+            pomodoro_data = {
+                # Información básica del pomodoro
+                "id_pomodoro_detail": pomodoro.id_pomodoro_detail,
+                "id_session": pomodoro.id_session,
+                "event_type": pomodoro.event_type,
+                "planned_duration": pomodoro.planned_duration,
+                "is_completed": pomodoro.is_completed,
+                "notes": pomodoro.notes,
+                "created_date": pomodoro.created_date,
+                
+                # Información completa de la regla
+                "regla": {
+                    "id_pomodoro_rule": regla.id_pomodoro_rule,
+                    "difficulty_level": regla.difficulty_level,
+                    "focus_duration": regla.focus_duration,
+                    "break_duration": regla.break_duration,
+                    "description": regla.description,
+                    "created_date": regla.created_date
+                },
+                
+                # Información completa del tipo
+                "tipo": {
+                    "id_pomodoro_type": tipo.id_pomodoro_type,
+                    "name_type": tipo.name_type
+                },
+                
+                # Información calculada
+                "tipo_evento": "Focus" if pomodoro.event_type == "focus" else "Break",
+                "duracion_real": pomodoro.planned_duration,
+                "estado": "Completado" if pomodoro.is_completed else "En progreso"
+            }
+            resultado.append(pomodoro_data)
+        
+        return {
+            "sesion": {
+                "id_session": sesion.id_session,
+                "session_name": sesion.session_name,
+                "total_focus_minutes": sesion.total_focus_minutes,
+                "total_break_minutes": sesion.total_break_minutes,
+                "total_pause_minutes": sesion.total_pause_minutes
+            },
+            "total_pomodoros": len(resultado),
+            "pomodoros": resultado
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener pomodoros completos: {str(e)}")
+
+@router.get("/pomodoros/{id_pomodoro_detail}/completo")
+def obtener_pomodoro_completo(id_pomodoro_detail: int, db: Session = Depends(get_db)):
+    """
+    Retorna un pomodoro específico con información completa
+    incluyendo datos de reglas, tipos y pausas asociadas
+    """
+    try:
+        # Obtener pomodoro con joins
+        resultado = db.query(
+            Pomodoro,
+            PomodoroRule,
+            PomodoroType,
+            Sesion
+        ).join(
+            PomodoroRule, Pomodoro.id_pomodoro_rule == PomodoroRule.id_pomodoro_rule
+        ).join(
+            PomodoroType, Pomodoro.id_pomodoro_type == PomodoroType.id_pomodoro_type
+        ).join(
+            Sesion, Pomodoro.id_session == Sesion.id_session
+        ).filter(
+            Pomodoro.id_pomodoro_detail == id_pomodoro_detail
+        ).first()
+        
+        if not resultado:
+            raise HTTPException(status_code=404, detail="Pomodoro no encontrado")
+        
+        pomodoro, regla, tipo, sesion = resultado
+        
+        # Obtener pausas asociadas a este pomodoro
+        pausas = db.query(PauseTracker).filter(
+            PauseTracker.id_pomodoro_detail == id_pomodoro_detail
+        ).all()
+        
+        pomodoro_data = {
+            # Información básica del pomodoro
+            "id_pomodoro_detail": pomodoro.id_pomodoro_detail,
+            "event_type": pomodoro.event_type,
+            "planned_duration": pomodoro.planned_duration,
+            "is_completed": pomodoro.is_completed,
+            "notes": pomodoro.notes,
+            "created_date": pomodoro.created_date,
+            
+            # Información de la sesión
+            "sesion": {
+                "id_session": sesion.id_session,
+                "session_name": sesion.session_name,
+                "id_user": sesion.id_user
+            },
+            
+            # Información completa de la regla
+            "regla": {
+                "id_pomodoro_rule": regla.id_pomodoro_rule,
+                "difficulty_level": regla.difficulty_level,
+                "focus_duration": regla.focus_duration,
+                "break_duration": regla.break_duration,
+                "description": regla.description
+            },
+            
+            # Información completa del tipo
+            "tipo": {
+                "id_pomodoro_type": tipo.id_pomodoro_type,
+                "name_type": tipo.name_type
+            },
+            
+            # Pausas asociadas
+            "pausas": [{
+                "id_pause": p.id_pause,
+                "pause_start": p.pause_start,
+                "pause_end": p.pause_end,
+                "total_pause_minutes": p.total_pause_minutes
+            } for p in pausas],
+            
+            # Información calculada
+            "total_pausas": len(pausas),
+            "total_minutos_pausa": sum(p.total_pause_minutes for p in pausas),
+            "tipo_evento": "Focus" if pomodoro.event_type == "focus" else "Break",
+            "estado": "Completado" if pomodoro.is_completed else "En progreso"
+        }
+        
+        return pomodoro_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener pomodoro completo: {str(e)}")
 
 # ============================================================
 # ENDPOINTS PARA PAUSAS
