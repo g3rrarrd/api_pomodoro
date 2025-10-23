@@ -19,14 +19,6 @@ router = APIRouter()
 # ENDPOINTS PARA USUARIOS
 # ============================================================
 
-@router.post("/usuarios/")
-def crear_usuario_legacy(nickname: str, db: Session = Depends(get_db)):
-    """Endpoint legacy - Redirigir al nuevo sistema"""
-    raise HTTPException(
-        status_code=410, 
-        detail="Este endpoint está obsoleto. Usa el sistema de registro con verificación: POST /auth/start-registration"
-    )
-
 @router.get("/usuarios/")
 def listar_usuarios(db: Session = Depends(get_db)):
     try:
@@ -50,6 +42,7 @@ def obtener_usuario(id_user: int, db: Session = Depends(get_db)):
         
         return {
             "id_user": usuario.id_user,
+            "email" : usuario.email,
             "nickname": usuario.nickname,
             "created_date": usuario.created_date
         }
@@ -68,6 +61,26 @@ def obtener_usuario_por_nickname(nickname: str, db: Session = Depends(get_db)):
         
         return {
             "id_user": usuario.id_user,
+            "email" : usuario.email,
+            "nickname": usuario.nickname,
+            "created_date": usuario.created_date
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener usuario: {str(e)}")
+
+@router.get("/usuarios/email/{email}")
+def obtener_usuario_por_email(email: str, db: Session = Depends(get_db)):
+    try:
+        usuario = db.query(Usuario).filter(Usuario.email == email).first()
+        
+        if not usuario:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+        return {
+            "id_user": usuario.id_user,
+            "email": usuario.email,
             "nickname": usuario.nickname,
             "created_date": usuario.created_date
         }
@@ -455,6 +468,29 @@ def listar_sesiones_usuario(id_user: int, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener sesiones: {str(e)}")
 
+@router.put("/sesiones/{id_session}/total_focus")
+def actualizar_total_focus(id_session: int, minutos: int, db: Session = Depends(get_db)):
+    try:
+        sesion = db.query(Sesion).filter(Sesion.id_session == id_session).first()
+        if not sesion:
+            raise HTTPException(status_code=404, detail="Sesión no encontrada")
+        
+        sesion.total_focus_minutes += minutos
+        db.commit()
+        
+        return {
+            "message": "Total de minutos de focus actualizado exitosamente",
+            "id_session": sesion.id_session,
+            "total_focus_minutes": sesion.total_focus_minutes
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al actualizar total de focus: {str(e)}")
+
+@router.put("/sesiones/{id_session}/total_break")
+def actualizar_total_break(id_session: int, minutos: int, db: Session = Depends(get_db)):
     try:
         sesion = db.query(Sesion).filter(Sesion.id_session == id_session).first()
         if not sesion:
@@ -474,39 +510,71 @@ def listar_sesiones_usuario(id_user: int, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al actualizar total de descanso: {str(e)}")
 
+@router.put("/sesiones/{id_session}/total_pause")
+def actualizar_total_pause(id_session: int, minutos: int, db: Session = Depends(get_db)):
+    try:
+        sesion = db.query(Sesion).filter(Sesion.id_session == id_session).first()
+        if not sesion:
+            raise HTTPException(status_code=404, detail="Sesión no encontrada")
+        
+        sesion.total_pause_minutes += minutos
+        db.commit()
+        
+        return {
+            "message": "Total de minutos de pausa actualizado exitosamente",
+            "id_session": sesion.id_session,
+            "total_pause_minutes": sesion.total_pause_minutes
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al actualizar total de pausa: {str(e)}")
+
 # ============================================================
 # ENDPOINTS PARA POMODOROS
 # ============================================================
 
 @router.post("/pomodoros/")
 def iniciar_pomodoro(
-    id_session: int, 
-    id_pomodoro_rule: int,
-    id_pomodoro_type: int,
-    event_type: str = "focus",
-    planned_duration: int = 25,
-    notes: str = None,
+    pomodoro_data: dict,
     db: Session = Depends(get_db)
 ):
     try:
+        # Extraer datos del JSON
+        id_session = pomodoro_data.get("id_session")
+        id_pomodoro_rule = pomodoro_data.get("id_pomodoro_rule")
+        id_pomodoro_type = pomodoro_data.get("id_pomodoro_type")
+        event_type = pomodoro_data.get("event_type", "focus")
+        planned_duration = pomodoro_data.get("planned_duration", 25)
+        notes = pomodoro_data.get("notes")
         
+        # Validar campos requeridos
+        if not id_session:
+            raise HTTPException(status_code=400, detail="id_session es requerido")
+        if not id_pomodoro_rule:
+            raise HTTPException(status_code=400, detail="id_pomodoro_rule es requerido")
+        if not id_pomodoro_type:
+            raise HTTPException(status_code=400, detail="id_pomodoro_type es requerido")
+        
+        # Verificar sesión
         sesion = db.query(Sesion).filter(Sesion.id_session == id_session).first()
         if not sesion:
             raise HTTPException(status_code=404, detail="Sesión no encontrada")
         
-        
+        # Verificar regla
         regla = db.query(PomodoroRule).filter(PomodoroRule.id_pomodoro_rule == id_pomodoro_rule).first()
         if not regla:
             raise HTTPException(status_code=404, detail="Regla de pomodoro no encontrada")
         
-        
+        # Verificar tipo
         tipo = db.query(PomodoroType).filter(PomodoroType.id_pomodoro_type == id_pomodoro_type).first()
         if not tipo:
             raise HTTPException(status_code=404, detail="Tipo de pomodoro no encontrado")
         
-        
-        if event_type not in ["focus", "break", "pause"]:
-            raise HTTPException(status_code=400, detail="Event type debe ser 'focus', 'break' o 'pause'")
+        # Validar event_type según el constraint de la base de datos
+        if event_type not in ["focus", "break"]:
+            raise HTTPException(status_code=400, detail="Event type debe ser 'focus' o 'break'")
         
         nuevo_pomodoro = Pomodoro(
             id_session=id_session,
@@ -529,6 +597,7 @@ def iniciar_pomodoro(
                 "event_type": nuevo_pomodoro.event_type,
                 "planned_duration": nuevo_pomodoro.planned_duration,
                 "is_completed": nuevo_pomodoro.is_completed,
+                "notes": nuevo_pomodoro.notes,
                 "created_date": nuevo_pomodoro.created_date
             }
         }
@@ -550,13 +619,12 @@ def completar_pomodoro(id_pomodoro_detail: int, db: Session = Depends(get_db)):
         
         pomodoro.is_completed = True
         
+        # Actualizar estadísticas de la sesión
         sesion = db.query(Sesion).filter(Sesion.id_session == pomodoro.id_session).first()
         if pomodoro.event_type == "focus":
             sesion.total_focus_minutes += pomodoro.planned_duration
         elif pomodoro.event_type == "break":
             sesion.total_break_minutes += pomodoro.planned_duration
-        elif pomodoro.event_type == "pause":
-            sesion.total_pause_minutes += pomodoro.planned_duration
         
         db.commit()
         
@@ -566,7 +634,8 @@ def completar_pomodoro(id_pomodoro_detail: int, db: Session = Depends(get_db)):
                 "id_pomodoro_detail": pomodoro.id_pomodoro_detail,
                 "event_type": pomodoro.event_type,
                 "planned_duration": pomodoro.planned_duration,
-                "is_completed": pomodoro.is_completed
+                "is_completed": pomodoro.is_completed,
+                "notes": pomodoro.notes
             }
         }
     except HTTPException:
@@ -592,34 +661,18 @@ def listar_pomodoros_sesion(id_session: int, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener pomodoros: {str(e)}")
 
-@router.put("/sesiones/{id_session}/total_pause")
-def actualizar_total_pause(id_session: int, minutos: int, db: Session = Depends(get_db)):
-    try:
-        sesion = db.query(Sesion).filter(Sesion.id_session == id_session).first()
-        if not sesion:
-            raise HTTPException(status_code=404, detail="Sesión no encontrada")
-        
-        sesion.total_pause_minutes += minutos
-        db.commit()
-        
-        return {
-            "message": "Total de minutos de pausa actualizado exitosamente",
-            "id_session": sesion.id_session,
-            "total_pause_minutes": sesion.total_pause_minutes
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al actualizar total de pausa: {str(e)}")
 
 # ============================================================
 # ENDPOINTS PARA PAUSAS
 # ============================================================
 
 @router.post("/pausas/")
-def iniciar_pausa(id_pomodoro_detail: int, db: Session = Depends(get_db)):
+def iniciar_pausa(pausa_data: dict, db: Session = Depends(get_db)):
     try:
+        id_pomodoro_detail = pausa_data.get("id_pomodoro_detail")
+        
+        if not id_pomodoro_detail:
+            raise HTTPException(status_code=400, detail="id_pomodoro_detail es requerido")
         
         pomodoro = db.query(Pomodoro).filter(Pomodoro.id_pomodoro_detail == id_pomodoro_detail).first()
         if not pomodoro:
@@ -664,6 +717,7 @@ def finalizar_pausa(id_pause: int, db: Session = Depends(get_db)):
         pausa.pause_end = tiempo_actual
         pausa.total_pause_minutes = minutos_pausa
         
+        # Actualizar estadísticas de la sesión
         pomodoro = db.query(Pomodoro).filter(Pomodoro.id_pomodoro_detail == pausa.id_pomodoro_detail).first()
         sesion = db.query(Sesion).filter(Sesion.id_session == pomodoro.id_session).first()
         sesion.total_pause_minutes += minutos_pausa
@@ -684,6 +738,7 @@ def finalizar_pausa(id_pause: int, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al finalizar pausa: {str(e)}")
+
 
 # ============================================================
 # ENDPOINTS PARA REGLAS Y TIPOS
@@ -721,7 +776,12 @@ def listar_tipos_pomodoro(db: Session = Depends(get_db)):
 @router.get("/estadisticas/usuario/{id_user}")
 def obtener_estadisticas_usuario(id_user: int, db: Session = Depends(get_db)):
     try:
+        # Verificar que el usuario existe
+        usuario = db.query(Usuario).filter(Usuario.id_user == id_user).first()
+        if not usuario:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
         
+        # Calcular estadísticas
         total_focus = db.query(
             func.sum(Sesion.total_focus_minutes).label('total_focus')
         ).filter(
@@ -757,5 +817,7 @@ def obtener_estadisticas_usuario(id_user: int, db: Session = Depends(get_db)):
             "total_sesiones": total_sesiones,
             "total_pomodoros_completados": total_pomodoros
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener estadísticas: {str(e)}")

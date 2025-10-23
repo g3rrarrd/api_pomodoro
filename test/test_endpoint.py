@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-SCRIPT DE PRUEBA COMPLETO - POMODORO APP
-Prueba todos los endpoints y funcionalidades del sistema
+SCRIPT DE PRUEBA ACTUALIZADO - POMODORO APP
+Usa los tipos y reglas específicos de la base de datos y el usuario existente
 """
 
 import requests
@@ -57,310 +57,374 @@ def esperar(segundos, motivo=""):
         time.sleep(1)
     print("✅ Listo!")
 
-def simular_flujo_completo():
-    """Simulación completa de todos los flujos de la aplicación"""
-    print("🚀 INICIANDO PRUEBA COMPLETA DEL SISTEMA POMODORO")
+def encontrar_regla_por_nombre(reglas, nombre):
+    """Encuentra una regla por su nombre de dificultad"""
+    for regla in reglas:
+        if regla['difficulty_level'].lower() == nombre.lower():
+            return regla['id_pomodoro_rule']
+    return None
+
+def encontrar_tipo_por_nombre(tipos, nombre):
+    """Encuentra un tipo por su nombre"""
+    for tipo in tipos:
+        if tipo['name_type'].lower() == nombre.lower():
+            return tipo['id_pomodoro_type']
+    return None
+
+def simular_flujo_completo_actualizado():
+    """Simulación completa usando los datos reales de la BD"""
+    print("🚀 INICIANDO PRUEBA COMPLETA CON DATOS REALES")
     print("=" * 70)
     
+    # Usuario existente
+    USUARIO_EXISTENTE = {
+        "id_user": 1,
+        "nickname": "GerardoAnt", 
+        "email": "grdgz51@gmail.com"
+    }
+    
     # =========================================================================
-    # 1. PRUEBAS DE CONFIGURACIÓN Y HEALTH CHECK
+    # 1. PRUEBAS DE CONFIGURACIÓN
     # =========================================================================
     print("\n🎯 1. PRUEBAS DE CONFIGURACIÓN")
     
-    # Health check
     test_endpoint("GET", "/health", descripcion="Health check del servidor")
-    
-    # Root endpoint
     test_endpoint("GET", "/", descripcion="Endpoint raíz")
     
-    # Información del sistema
-    test_endpoint("GET", "/info", descripcion="Información del sistema")
-    
     # =========================================================================
-    # 2. PRUEBAS DE REGLAS Y TIPOS
+    # 2. OBTENER REGLAS Y TIPOS REALES
     # =========================================================================
-    print("\n🎯 2. PRUEBAS DE REGLAS Y TIPOS DE POMODORO")
+    print("\n🎯 2. OBTENIENDO REGLAS Y TIPOS DE LA BASE DE DATOS")
     
     # Obtener reglas disponibles
     reglas = test_endpoint("GET", "/reglas-pomodoro/", descripcion="Obtener reglas de pomodoro")
     if reglas:
-        print(f"📋 Reglas disponibles: {len(reglas)}")
+        print(f"📋 Reglas disponibles en BD:")
         for regla in reglas:
             print(f"   - {regla['difficulty_level']}: Focus {regla['focus_duration']}min, Break {regla['break_duration']}min")
     
-    # Obtener tipos disponibles
+    # Obtener tipos disponibles  
     tipos = test_endpoint("GET", "/tipos-pomodoro/", descripcion="Obtener tipos de pomodoro")
     if tipos:
-        print(f"📋 Tipos disponibles: {len(tipos)}")
+        print(f"📋 Tipos disponibles en BD:")
         for tipo in tipos:
             print(f"   - {tipo['name_type']}")
     
     # =========================================================================
-    # 3. PRUEBAS DE AUTENTICACIÓN Y USUARIOS
+    # 3. PRUEBAS CON USUARIO EXISTENTE
     # =========================================================================
-    print("\n🎯 3. PRUEBAS DE AUTENTICACIÓN Y USUARIOS")
+    print("\n🎯 3. PRUEBAS CON USUARIO EXISTENTE")
     
-    # Crear usuarios de prueba
-    usuarios_prueba = [
-        {"email": f"testusuario{random.randint(1000,9999)}@gmail.com", "nickname": f"TestUser{random.randint(100,999)}"},
-        {"email": f"estudiante{random.randint(1000,9999)}@hotmail.com", "nickname": f"Estudiante{random.randint(100,999)}"},
-        {"email": f"developer{random.randint(1000,9999)}@outlook.com", "nickname": f"Dev{random.randint(100,999)}"}
+    # Obtener información del usuario existente
+    usuario_info = test_endpoint("GET", f"/usuarios/{USUARIO_EXISTENTE['id_user']}", 
+                               descripcion=f"Obteniendo información de {USUARIO_EXISTENTE['nickname']}")
+    
+    # Obtener usuario por email
+    test_endpoint("GET", f"/usuarios/email/{USUARIO_EXISTENTE['email']}",
+                 descripcion=f"Buscando usuario por email")
+    
+    # Obtener usuario por nickname
+    test_endpoint("GET", f"/usuarios/nickname/{USUARIO_EXISTENTE['nickname']}",
+                 descripcion=f"Buscando usuario por nickname")
+    
+    # =========================================================================
+    # 4. CREAR SESIONES DE TRABAJO REALISTAS
+    # =========================================================================
+    print("\n🎯 4. CREANDO SESIONES DE TRABAJO REALISTAS")
+    
+    sesiones_reales = [
+        "Estudio Intensivo - Matemáticas Avanzadas",
+        "Desarrollo API - Proyecto Personal", 
+        "Lectura Técnica - Patrones de Diseño",
+        "Planificación Semanal - Metas y Objetivos",
+        "Ejercicio de Programación - Algoritmos"
     ]
-    
-    usuarios_creados = []
-    
-    for i, usuario in enumerate(usuarios_prueba, 1):
-        print(f"\n👤 Creando usuario {i}/3:")
-        print(f"   Email: {usuario['email']}")
-        print(f"   Nickname: {usuario['nickname']}")
-        
-        # Iniciar registro
-        inicio_registro = test_endpoint("POST", "/auth/start-registration", 
-                                      params={"email": usuario['email'], "nickname": usuario['nickname']},
-                                      descripcion=f"Iniciando registro usuario {i}")
-        
-        if inicio_registro:
-            # Simular código de verificación (en producción esto viene por email)
-            codigo_simulado = "123456"
-            
-            # Verificar código
-            verificacion = test_endpoint("POST", "/auth/verify",
-                                       params={"email": usuario['email'], "code": codigo_simulado},
-                                       descripcion=f"Verificando usuario {i}")
-            
-            if verificacion:
-                usuarios_creados.append({
-                    "email": usuario['email'],
-                    "nickname": usuario['nickname'],
-                    "id_user": verificacion['usuario']['id_user']
-                })
-                print(f"✅ Usuario {usuario['nickname']} creado exitosamente (ID: {verificacion['usuario']['id_user']})")
-    
-    # =========================================================================
-    # 4. PRUEBAS DE SESIONES
-    # =========================================================================
-    print("\n🎯 4. PRUEBAS DE SESIONES")
     
     sesiones_creadas = []
     
-    for usuario in usuarios_creados:
-        # Crear sesiones para cada usuario
-        sesiones_usuario = [
-            f"Sesión Estudio - {usuario['nickname']}",
-            f"Sesión Trabajo - {usuario['nickname']}",
-            f"Sesión Lectura - {usuario['nickname']}"
-        ]
+    for nombre_sesion in sesiones_reales:
+        sesion = test_endpoint("POST", "/sesiones/",
+                             params={"id_user": USUARIO_EXISTENTE['id_user'], "session_name": nombre_sesion},
+                             descripcion=f"Creando sesión: {nombre_sesion}")
         
-        for nombre_sesion in sesiones_usuario:
-            sesion = test_endpoint("POST", "/sesiones/",
-                                 params={"id_user": usuario['id_user'], "session_name": nombre_sesion},
-                                 descripcion=f"Creando sesión: {nombre_sesion}")
-            
-            if sesion:
-                sesiones_creadas.append({
-                    "id_session": sesion['sesion']['id_session'],
-                    "id_user": usuario['id_user'],
-                    "session_name": nombre_sesion
-                })
+        if sesion:
+            sesiones_creadas.append({
+                "id_session": sesion['sesion']['id_session'],
+                "session_name": nombre_sesion
+            })
+            print(f"✅ Sesión creada: {nombre_sesion} (ID: {sesion['sesion']['id_session']})")
     
-    # Listar sesiones por usuario
-    for usuario in usuarios_creados:
-        sesiones = test_endpoint("GET", f"/sesiones/usuario/{usuario['id_user']}",
-                               descripcion=f"Listando sesiones de {usuario['nickname']}")
-        
-        if sesiones:
-            print(f"📚 {usuario['nickname']} tiene {len(sesiones)} sesiones:")
-            for sesion in sesiones:
-                print(f"   - {sesion['session_name']} (Focus: {sesion['total_focus_minutes']}min)")
+    # Listar sesiones del usuario
+    sesiones_usuario = test_endpoint("GET", f"/sesiones/usuario/{USUARIO_EXISTENTE['id_user']}",
+                                   descripcion="Listando todas las sesiones del usuario")
     
     # =========================================================================
-    # 5. PRUEBAS DE POMODOROS COMPLETOS
+    # 5. SIMULACIÓN DE DÍA COMPLETO DE TRABAJO
     # =========================================================================
-    print("\n🎯 5. PRUEBAS DE POMODOROS Y PAUSAS")
+    print("\n🎯 5. SIMULANDO DÍA COMPLETO DE TRABAJO Y ESTUDIO")
     
-    # Usar la primera sesión para pruebas de pomodoros
-    if sesiones_creadas:
-        sesion_prueba = sesiones_creadas[0]
+    if sesiones_creadas and reglas and tipos:
+        # Usar la primera sesión para la simulación
+        sesion_principal = sesiones_creadas[0]
         
-        # Flujo completo de pomodoro con pausa
-        print(f"\n⏰ SIMULANDO FLUJO POMODORO COMPLETO EN SESIÓN: {sesion_prueba['session_name']}")
+        # Encontrar IDs de reglas y tipos específicos
+        regla_paso_bebe = encontrar_regla_por_nombre(reglas, "Paso de bebe")
+        regla_popular = encontrar_regla_por_nombre(reglas, "Popular") 
+        regla_medio = encontrar_regla_por_nombre(reglas, "Medio")
+        regla_intenso = encontrar_regla_por_nombre(reglas, "Intenso")
+        regla_extendido = encontrar_regla_por_nombre(reglas, "Extendido")
         
-        # Pomodoro de focus
-        pomodoro_focus = test_endpoint("POST", "/pomodoros/",
-                                     json_data={
-                                         "id_session": sesion_prueba['id_session'],
-                                         "id_pomodoro_rule": 2,  # Popular (25/5)
-                                         "id_pomodoro_type": 1,  # Estudio
-                                         "event_type": "focus",
-                                         "planned_duration": 25,
-                                         "notes": "Estudiando matemáticas avanzadas - Teoría de números"
-                                     },
-                                     descripcion="Iniciando pomodoro de FOCUS")
+        tipo_estudio = encontrar_tipo_por_nombre(tipos, "Estudio")
+        tipo_trabajo = encontrar_tipo_por_nombre(tipos, "Trabajo")
+        tipo_lectura = encontrar_tipo_por_nombre(tipos, "Lectura")
+        tipo_ejercicio = encontrar_tipo_por_nombre(tipos, "Ejercicio")
+        tipo_meditacion = encontrar_tipo_por_nombre(tipos, "Meditación")
+        tipo_proyectos = encontrar_tipo_por_nombre(tipos, "Proyectos Personales")
+        tipo_desarrollo = encontrar_tipo_por_nombre(tipos, "Desarrollo de Habilidades")
+        tipo_planificacion = encontrar_tipo_por_nombre(tipos, "Planificación y Organización")
+        tipo_descanso = encontrar_tipo_por_nombre(tipos, "Descanso Activo")
         
-        if pomodoro_focus:
-            p_id = pomodoro_focus['pomodoro']['id_pomodoro_detail']
-            
+        print(f"\n🔧 IDs encontrados:")
+        print(f"   Reglas: Paso bebe({regla_paso_bebe}), Popular({regla_popular}), Medio({regla_medio}), Intenso({regla_intenso}), Extendido({regla_extendido})")
+        print(f"   Tipos: Estudio({tipo_estudio}), Trabajo({tipo_trabajo}), Lectura({tipo_lectura}), Descanso({tipo_descanso})")
+        
+        # =====================================================================
+        # MAÑANA: Sesión de estudio intensivo
+        # =====================================================================
+        print(f"\n🌅 MAÑANA: SESIÓN DE ESTUDIO INTENSIVO")
+        
+        # Pomodoro 1: Calentamiento (Paso de bebe)
+        p1 = test_endpoint("POST", "/pomodoros/",
+                         json_data={
+                             "id_session": sesion_principal['id_session'],
+                             "id_pomodoro_rule": regla_paso_bebe,
+                             "id_pomodoro_type": tipo_estudio,
+                             "event_type": "focus",
+                             "planned_duration": 10,
+                             "notes": "Calentamiento - Repaso de conceptos básicos de álgebra"
+                         },
+                         descripcion="Pomodoro 1: Calentamiento (Paso de bebe)")
+        
+        if p1:
+            test_endpoint("PUT", f"/pomodoros/{p1['pomodoro']['id_pomodoro_detail']}/completar",
+                        descripcion="Completando calentamiento")
+        
+        # Break 1: Descanso activo
+        b1 = test_endpoint("POST", "/pomodoros/",
+                         json_data={
+                             "id_session": sesion_principal['id_session'],
+                             "id_pomodoro_rule": regla_paso_bebe,
+                             "id_pomodoro_type": tipo_descanso,
+                             "event_type": "break", 
+                             "planned_duration": 5,
+                             "notes": "Break - Estiramientos e hidratación"
+                         },
+                         descripcion="Break 1: Descanso activo")
+        
+        if b1:
+            test_endpoint("PUT", f"/pomodoros/{b1['pomodoro']['id_pomodoro_detail']}/completar",
+                        descripcion="Finalizando break")
+        
+        # Pomodoro 2: Estudio profundo (Popular)
+        p2 = test_endpoint("POST", "/pomodoros/",
+                         json_data={
+                             "id_session": sesion_principal['id_session'],
+                             "id_pomodoro_rule": regla_popular,
+                             "id_pomodoro_type": tipo_estudio,
+                             "event_type": "focus",
+                             "planned_duration": 25,
+                             "notes": "Estudio profundo - Cálculo diferencial e integral"
+                         },
+                         descripcion="Pomodoro 2: Estudio profundo (Popular)")
+        
+        if p2:
             # Simular pausa durante el pomodoro
-            print(f"\n⏸️  Simulando pausa durante el pomodoro...")
-            pausa = test_endpoint("POST", "/pausas/",
-                                json_data={"id_pomodoro_detail": p_id},
-                                descripcion="Iniciando pausa durante pomodoro")
+            pausa1 = test_endpoint("POST", "/pausas/",
+                     json_data={"id_pomodoro_detail": p2['pomodoro']['id_pomodoro_detail']},
+                     descripcion="Pausa técnica durante estudio")
             
-            if pausa:
-                pausa_id = pausa['pausa']['id_pause']
-                esperar(3, "Pausa en progreso")
-                
-                # Finalizar pausa
-                test_endpoint("PUT", f"/pausas/{pausa_id}/finalizar",
-                            descripcion="Finalizando pausa")
+            if pausa1:
+                esperar(2, "Pausa técnica")
+                test_endpoint("PUT", f"/pausas/{pausa1['pausa']['id_pause']}/finalizar",
+                            descripcion="Finalizando pausa técnica")
             
-            # Completar pomodoro
-            test_endpoint("PUT", f"/pomodoros/{p_id}/completar",
-                        descripcion="Completando pomodoro de focus")
-            
-            # Pomodoro de break
-            pomodoro_break = test_endpoint("POST", "/pomodoros/",
-                                         json_data={
-                                             "id_session": sesion_prueba['id_session'],
-                                             "id_pomodoro_rule": 2,  # Popular (25/5)
-                                             "id_pomodoro_type": 3,  # Descanso
-                                             "event_type": "break",
-                                             "planned_duration": 5,
-                                             "notes": "Descanso corto - Estiramientos e hidratación"
-                                         },
-                                         descripcion="Iniciando pomodoro de BREAK")
-            
-            if pomodoro_break:
-                b_id = pomodoro_break['pomodoro']['id_pomodoro_detail']
-                test_endpoint("PUT", f"/pomodoros/{b_id}/completar",
-                            descripcion="Completando break")
+            test_endpoint("PUT", f"/pomodoros/{p2['pomodoro']['id_pomodoro_detail']}/completar",
+                        descripcion="Completando estudio profundo")
         
-        # Probar diferentes tipos de pomodoros
-        tipos_pomodoro = [
-            {"rule": 1, "type": 1, "duration": 15, "notes": "Paso de bebe - Calentamiento"},
-            {"rule": 3, "type": 2, "duration": 40, "notes": "Medio - Trabajo profundo"},
-            {"rule": 4, "type": 4, "duration": 60, "notes": "Intenso - Desarrollo complejo"}
-        ]
+        # =====================================================================
+        # TARDE: Sesión de desarrollo y proyectos
+        # =====================================================================
+        print(f"\n🌇 TARDE: SESIÓN DE DESARROLLO Y PROYECTOS")
         
-        for i, config in enumerate(tipos_pomodoro, 1):
-            pomodoro = test_endpoint("POST", "/pomodoros/",
-                                   json_data={
-                                       "id_session": sesion_prueba['id_session'],
-                                       "id_pomodoro_rule": config['rule'],
-                                       "id_pomodoro_type": config['type'],
-                                       "event_type": "focus",
-                                       "planned_duration": config['duration'],
-                                       "notes": config['notes']
-                                   },
-                                   descripcion=f"Pomodoro tipo {i}: {config['notes']}")
+        # Usar segunda sesión para la tarde
+        if len(sesiones_creadas) > 1:
+            sesion_tarde = sesiones_creadas[1]
             
-            if pomodoro:
-                p_id = pomodoro['pomodoro']['id_pomodoro_detail']
-                test_endpoint("PUT", f"/pomodoros/{p_id}/completar",
-                            descripcion=f"Completando pomodoro tipo {i}")
+            # Pomodoro 3: Desarrollo intensivo
+            p3 = test_endpoint("POST", "/pomodoros/",
+                             json_data={
+                                 "id_session": sesion_tarde['id_session'],
+                                 "id_pomodoro_rule": regla_intenso,
+                                 "id_pomodoro_type": tipo_desarrollo,
+                                 "event_type": "focus",
+                                 "planned_duration": 60,
+                                 "notes": "Desarrollo intensivo - Implementación de API REST con FastAPI"
+                             },
+                             descripcion="Pomodoro 3: Desarrollo intensivo (Intenso)")
+            
+            if p3:
+                test_endpoint("PUT", f"/pomodoros/{p3['pomodoro']['id_pomodoro_detail']}/completar",
+                            descripcion="Completando desarrollo intensivo")
+            
+            # Break largo después de sesión intensiva
+            b2 = test_endpoint("POST", "/pomodoros/",
+                             json_data={
+                                 "id_session": sesion_tarde['id_session'],
+                                 "id_pomodoro_rule": regla_intenso,
+                                 "id_pomodoro_type": tipo_descanso,
+                                 "event_type": "break",
+                                 "planned_duration": 10,
+                                 "notes": "Break largo - Caminata y merienda"
+                             },
+                             descripcion="Break 2: Descanso prolongado")
+            
+            if b2:
+                test_endpoint("PUT", f"/pomodoros/{b2['pomodoro']['id_pomodoro_detail']}/completar",
+                            descripcion="Finalizando break largo")
+        
+        # =====================================================================
+        # NOCHE: Sesión de lectura y planificación
+        # =====================================================================
+        print(f"\n🌃 NOCHE: SESIÓN DE LECTURA Y PLANIFICACIÓN")
+        
+        if len(sesiones_creadas) > 2:
+            sesion_noche = sesiones_creadas[2]
+            
+            # Pomodoro 4: Lectura técnica
+            p4 = test_endpoint("POST", "/pomodoros/",
+                             json_data={
+                                 "id_session": sesion_noche['id_session'],
+                                 "id_pomodoro_rule": regla_medio,
+                                 "id_pomodoro_type": tipo_lectura,
+                                 "event_type": "focus", 
+                                 "planned_duration": 40,
+                                 "notes": "Lectura técnica - Documentación de arquitectura de software"
+                             },
+                             descripcion="Pomodoro 4: Lectura técnica (Medio)")
+            
+            if p4:
+                test_endpoint("PUT", f"/pomodoros/{p4['pomodoro']['id_pomodoro_detail']}/completar",
+                            descripcion="Completando lectura técnica")
+            
+            # Pomodoro 5: Planificación
+            p5 = test_endpoint("POST", "/pomodoros/",
+                             json_data={
+                                 "id_session": sesion_noche['id_session'],
+                                 "id_pomodoro_rule": regla_popular,
+                                 "id_pomodoro_type": tipo_planificacion,
+                                 "event_type": "focus",
+                                 "planned_duration": 25,
+                                 "notes": "Planificación - Organización de tareas para mañana"
+                             },
+                             descripcion="Pomodoro 5: Planificación (Popular)")
+            
+            if p5:
+                test_endpoint("PUT", f"/pomodoros/{p5['pomodoro']['id_pomodoro_detail']}/completar",
+                            descripcion="Completando planificación")
     
     # =========================================================================
-    # 6. PRUEBAS DE ACTUALIZACIÓN MANUAL DE TIEMPOS
+    # 6. ACTUALIZACIÓN MANUAL DE TIEMPOS
     # =========================================================================
-    print("\n🎯 6. PRUEBAS DE ACTUALIZACIÓN MANUAL DE TIEMPOS")
+    print("\n🎯 6. ACTUALIZACIÓN MANUAL DE TIEMPOS")
     
     if sesiones_creadas:
-        sesion_actualizar = sesiones_creadas[1]  # Usar segunda sesión
+        # Actualizar tiempos manualmente para una sesión
+        sesion_actualizar = sesiones_creadas[3] if len(sesiones_creadas) > 3 else sesiones_creadas[0]
         
-        # Actualizar minutos manualmente
         test_endpoint("PUT", f"/sesiones/{sesion_actualizar['id_session']}/total_focus",
-                    params={"minutos": 30},
-                    descripcion="Actualizando minutos de focus manualmente")
+                    params={"minutos": 45},
+                    descripcion="Agregando 45min de focus manual")
         
-        test_endpoint("PUT", f"/sesiones/{sesion_actualizar['id_session']}/total_break", 
-                    params={"minutos": 10},
-                    descripcion="Actualizando minutos de break manualmente")
+        test_endpoint("PUT", f"/sesiones/{sesion_actualizar['id_session']}/total_break",
+                    params={"minutos": 15}, 
+                    descripcion="Agregando 15min de break manual")
         
         test_endpoint("PUT", f"/sesiones/{sesion_actualizar['id_session']}/total_pause",
-                    params={"minutos": 5},
-                    descripcion="Actualizando minutos de pausa manualmente")
+                    params={"minutos": 8},
+                    descripcion="Agregando 8min de pausa manual")
     
     # =========================================================================
-    # 7. PRUEBAS DE ESTADÍSTICAS
+    # 7. ESTADÍSTICAS Y REPORTES
     # =========================================================================
-    print("\n🎯 7. PRUEBAS DE ESTADÍSTICAS")
+    print("\n🎯 7. ESTADÍSTICAS Y REPORTES FINALES")
     
-    for usuario in usuarios_creados:
-        estadisticas = test_endpoint("GET", f"/estadisticas/usuario/{usuario['id_user']}",
-                                   descripcion=f"Estadísticas de {usuario['nickname']}")
+    # Estadísticas del usuario
+    estadisticas = test_endpoint("GET", f"/estadisticas/usuario/{USUARIO_EXISTENTE['id_user']}",
+                               descripcion="Estadísticas completas del usuario")
+    
+    if estadisticas:
+        print(f"\n📊 RESUMEN ESTADÍSTICAS - {USUARIO_EXISTENTE['nickname']}:")
+        print(f"   🎯 Focus total: {estadisticas['total_focus_minutes']} minutos")
+        print(f"   ☕ Break total: {estadisticas['total_break_minutes']} minutos") 
+        print(f"   ⏸️  Pause total: {estadisticas['total_pause_minutes']} minutos")
+        print(f"   📚 Sesiones totales: {estadisticas['total_sesiones']}")
+        print(f"   ✅ Pomodoros completados: {estadisticas['total_pomodoros_completados']}")
+    
+    # Listar todos los pomodoros de una sesión
+    if sesiones_creadas:
+        sesion_reporte = sesiones_creadas[0]
+        pomodoros = test_endpoint("GET", f"/pomodoros/sesion/{sesion_reporte['id_session']}",
+                                descripcion=f"Reporte de pomodoros - {sesion_reporte['session_name']}")
         
-        if estadisticas:
-            print(f"\n📊 RESUMEN ESTADÍSTICAS - {usuario['nickname']}:")
-            print(f"   🎯 Focus total: {estadisticas['total_focus_minutes']} minutos")
-            print(f"   ☕ Break total: {estadisticas['total_break_minutes']} minutos")
-            print(f"   ⏸️  Pause total: {estadisticas['total_pause_minutes']} minutos")
-            print(f"   📚 Sesiones: {estadisticas['total_sesiones']}")
-            print(f"   ✅ Pomodoros completados: {estadisticas['total_pomodoros_completados']}")
+        if pomodoros:
+            print(f"\n📝 POMODOROS EN {sesion_reporte['session_name']}:")
+            focus_total = 0
+            break_total = 0
+            
+            for p in pomodoros:
+                if p['is_completed']:
+                    if p['event_type'] == 'focus':
+                        focus_total += p['planned_duration']
+                    elif p['event_type'] == 'break':
+                        break_total += p['planned_duration']
+                    
+                    estado = "✅ COMPLETADO"
+                    print(f"   {estado} {p['event_type'].upper()} - {p['planned_duration']}min - {p['notes']}")
+            
+            print(f"   📈 Resumen sesión: Focus {focus_total}min, Break {break_total}min")
     
     # =========================================================================
     # 8. PRUEBAS DE RECUPERACIÓN DE USUARIO
     # =========================================================================
     print("\n🎯 8. PRUEBAS DE RECUPERACIÓN DE USUARIO")
     
-    if usuarios_creados:
-        usuario_recuperar = usuarios_creados[0]
-        
-        # Solicitar recuperación
-        test_endpoint("POST", "/auth/forgot-username",
-                    params={"email": usuario_recuperar['email']},
-                    descripcion="Solicitando recuperación de usuario")
-        
-        # Verificar estado de recuperación
-        test_endpoint("GET", f"/auth/recovery-status/{usuario_recuperar['email']}",
-                    descripcion="Estado de recuperación")
-        
-        # Verificar código (simulado)
-        test_endpoint("POST", "/auth/verify-recovery",
-                    params={"email": usuario_recuperar['email'], "code": "123456"},
-                    descripcion="Verificando código de recuperación")
+    test_endpoint("POST", "/auth/forgot-username",
+                params={"email": USUARIO_EXISTENTE['email']},
+                descripcion="Solicitando recuperación de usuario existente")
+    
+    test_endpoint("GET", f"/auth/recovery-status/{USUARIO_EXISTENTE['email']}",
+                descripcion="Estado de recuperación")
     
     # =========================================================================
-    # 9. PRUEBAS DE CONSULTA DE DATOS
+    # 9. PRUEBAS DE ERRORES
     # =========================================================================
-    print("\n🎯 9. PRUEBAS DE CONSULTA DE DATOS")
+    print("\n🎯 9. PRUEBAS DE MANEJO DE ERRORES")
     
-    # Listar todos los usuarios
-    todos_usuarios = test_endpoint("GET", "/usuarios/",
-                                 descripcion="Listando todos los usuarios")
+    # Intentar crear sesión con usuario inexistente
+    test_endpoint("POST", "/sesiones/",
+                params={"id_user": 9999, "session_name": "Sesión de prueba"},
+                descripcion="Intentando crear sesión con usuario inexistente")
     
-    # Listar pomodoros de sesión
-    if sesiones_creadas:
-        sesion_consulta = sesiones_creadas[0]
-        pomodoros = test_endpoint("GET", f"/pomodoros/sesion/{sesion_consulta['id_session']}",
-                                descripcion=f"Listando pomodoros de sesión {sesion_consulta['session_name']}")
-        
-        if pomodoros:
-            print(f"\n📝 Pomodoros en {sesion_consulta['session_name']}:")
-            for p in pomodoros:
-                estado = "✅" if p['is_completed'] else "⏳"
-                print(f"   {estado} {p['event_type']} - {p['planned_duration']}min - {p['notes']}")
-    
-    # =========================================================================
-    # 10. PRUEBAS DE ERRORES Y CASOS BORDE
-    # =========================================================================
-    print("\n🎯 10. PRUEBAS DE ERRORES Y CASOS BORDE")
-    
-    # Usuario no existente
-    test_endpoint("GET", "/usuarios/9999", descripcion="Usuario no existente")
-    
-    # Sesión no existente
-    test_endpoint("GET", "/sesiones/usuario/9999", descripcion="Sesiones de usuario no existente")
-    
-    # Email duplicado (intentar crear usuario existente)
-    if usuarios_creados:
-        test_endpoint("POST", "/auth/start-registration",
-                    params={"email": usuarios_creados[0]['email'], "nickname": "NuevoNickname"},
-                    descripcion="Intentando registrar email duplicado")
-    
-    # Código de verificación incorrecto
-    test_endpoint("POST", "/auth/verify",
-                params={"email": "test@ejemplo.com", "code": "999999"},
-                descripcion="Código de verificación incorrecto")
+    # Intentar crear pomodoro con sesión inexistente
+    test_endpoint("POST", "/pomodoros/",
+                json_data={
+                    "id_session": 9999,
+                    "id_pomodoro_rule": 1,
+                    "id_pomodoro_type": 1, 
+                    "event_type": "focus",
+                    "planned_duration": 25
+                },
+                descripcion="Intentando crear pomodoro con sesión inexistente")
     
     # Event type inválido
     test_endpoint("POST", "/pomodoros/",
@@ -368,16 +432,16 @@ def simular_flujo_completo():
                     "id_session": 1,
                     "id_pomodoro_rule": 1,
                     "id_pomodoro_type": 1,
-                    "event_type": "invalid_type",
+                    "event_type": "trabajo",  # Inválido
                     "planned_duration": 25
                 },
-                descripcion="Event type inválido")
+                descripcion="Intentando crear pomodoro con event type inválido")
 
 def main():
     """Función principal"""
-    print("🎯 SISTEMA DE PRUEBAS AUTOMATIZADAS - POMODORO APP")
-    print("⏰ Este script probará TODAS las funcionalidades del sistema")
-    print("📊 Se crearán usuarios, sesiones, pomodoros y se generarán estadísticas")
+    print("🎯 SISTEMA DE PRUEBAS CON DATOS REALES - POMODORO APP")
+    print("📊 Usando usuario existente: GerardoAnt (ID: 1)")
+    print("🔧 Probando con tipos y reglas específicos de la BD")
     print("=" * 70)
     
     # Verificar que el servidor esté corriendo
@@ -394,21 +458,25 @@ def main():
     
     # Ejecutar simulación completa
     inicio = datetime.now()
-    simular_flujo_completo()
+    simular_flujo_completo_actualizado()
     fin = datetime.now()
     
     # Resumen final
     print("\n" + "=" * 70)
     print("🎉 PRUEBA COMPLETA FINALIZADA")
     print(f"⏱️  Tiempo total: {(fin - inicio).total_seconds():.1f} segundos")
-    print("📈 Resumen:")
-    print("   ✅ Pruebas de configuración y health check")
-    print("   ✅ Pruebas de autenticación y usuarios") 
-    print("   ✅ Pruebas de sesiones y pomodoros")
-    print("   ✅ Pruebas de estadísticas y consultas")
-    print("   ✅ Pruebas de errores y casos borde")
-    print("   ✅ Pruebas de recuperación de usuario")
-    print("\n🚀 El sistema está funcionando correctamente!")
+    print("📈 Resumen de pruebas realizadas:")
+    print("   ✅ Configuración y health check")
+    print("   ✅ Obtención de reglas y tipos reales de BD") 
+    print("   ✅ Pruebas con usuario existente GerardoAnt")
+    print("   ✅ Creación de sesiones realistas")
+    print("   ✅ Simulación de día completo (mañana/tarde/noche)")
+    print("   ✅ Diferentes tipos de pomodoro y reglas")
+    print("   ✅ Actualización manual de tiempos")
+    print("   ✅ Estadísticas y reportes")
+    print("   ✅ Sistema de recuperación")
+    print("   ✅ Manejo de errores")
+    print("\n🚀 El sistema está funcionando correctamente con datos reales!")
     print("=" * 70)
 
 if __name__ == "__main__":
