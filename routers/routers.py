@@ -1,11 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from utils.database import get_db
 from models.models import Usuario, Sesion, Pomodoro, PomodoroRule, PomodoroType, PauseTracker
+from utils.auth_utils import (
+    generate_verification_code, create_verification_token,
+    verify_verification_token, send_verification_email,
+    verification_cache, VERIFICATION_EXPIRE_MINUTES, send_recovery_email,
+    send_username_reminder_email
+)
 
 router = APIRouter()
 
@@ -14,31 +20,12 @@ router = APIRouter()
 # ============================================================
 
 @router.post("/usuarios/")
-def crear_usuario(nickname: str, db: Session = Depends(get_db)):
-    try:
-        
-        usuario_existente = db.query(Usuario).filter(Usuario.nickname == nickname).first()
-        if usuario_existente:
-            raise HTTPException(status_code=400, detail="El nickname ya está registrado")
-        
-        nuevo_usuario = Usuario(nickname=nickname)
-        db.add(nuevo_usuario)
-        db.commit()
-        db.refresh(nuevo_usuario)
-        
-        return {
-            "message": "Usuario creado exitosamente",
-            "usuario": {
-                "id_user": nuevo_usuario.id_user,
-                "nickname": nuevo_usuario.nickname,
-                "created_date": nuevo_usuario.created_date
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al crear usuario: {str(e)}")
+def crear_usuario_legacy(nickname: str, db: Session = Depends(get_db)):
+    """Endpoint legacy - Redirigir al nuevo sistema"""
+    raise HTTPException(
+        status_code=410, 
+        detail="Este endpoint está obsoleto. Usa el sistema de registro con verificación: POST /auth/start-registration"
+    )
 
 @router.get("/usuarios/")
 def listar_usuarios(db: Session = Depends(get_db)):
@@ -46,12 +33,13 @@ def listar_usuarios(db: Session = Depends(get_db)):
         usuarios = db.query(Usuario).all()
         return [{
             "id_user": u.id_user,
+            "email": u.email,
             "nickname": u.nickname,
             "created_date": u.created_date
         } for u in usuarios]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener usuarios: {str(e)}")
-    
+
 @router.get("/usuarios/{id_user}")
 def obtener_usuario(id_user: int, db: Session = Depends(get_db)):
     try:
@@ -87,6 +75,336 @@ def obtener_usuario_por_nickname(nickname: str, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener usuario: {str(e)}")
+
+# ============================================================
+# ENDPOINTS DE VERIFICACION
+# ============================================================
+
+@router.post("/auth/start-registration")
+def iniciar_registro(
+    request: Request,
+    email: str,
+    nickname: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Inicia el proceso de registro enviando código de verificación"""
+    try:
+        # Validaciones básicas
+        if not email or "@" not in email:
+            raise HTTPException(status_code=400, detail="Email inválido")
+        
+        if not nickname or len(nickname) < 2:
+            raise HTTPException(status_code=400, detail="Nickname debe tener al menos 2 caracteres")
+
+        # Verificar si el email ya está registrado
+        usuario_existente = db.query(Usuario).filter(Usuario.email == email).first()
+        if usuario_existente:
+            raise HTTPException(status_code=400, detail="El email ya está registrado")
+
+        # Verificar si el nickname ya está en uso
+        nickname_existente = db.query(Usuario).filter(Usuario.nickname == nickname).first()
+        if nickname_existente:
+            raise HTTPException(status_code=400, detail="El nickname ya está en uso")
+
+        # Generar código de verificación
+        verification_code = generate_verification_code()
+        
+        # Crear JWT temporal con los datos del usuario
+        verification_data = {
+            "email": email,
+            "nickname": nickname,
+            "code": verification_code,
+            "type": "registration"
+        }
+        
+        verification_token = create_verification_token(verification_data)
+        
+        # Guardar en cache para verificación rápida
+        verification_cache[email] = {
+            "token": verification_token,
+            "code": verification_code,
+            "nickname": nickname,
+            "created_at": datetime.now(timezone.utc),
+            "attempts": 0
+        }
+
+        # Enviar código por email (en background)
+        background_tasks.add_task(send_verification_email, email, verification_code)
+
+        return {
+            "message": "Código de verificación enviado a tu email",
+            "email": email,
+            "expires_in_minutes": VERIFICATION_EXPIRE_MINUTES,
+            "note": "Usa este código para completar el registro en /auth/verify"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al iniciar registro: {str(e)}")
+
+@router.post("/auth/verify")
+def verificar_y_registrar(
+    email: str,
+    code: str,
+    db: Session = Depends(get_db)
+):
+    """Verifica el código y crea el usuario"""
+    try:
+        # Buscar en cache
+        cached_data = verification_cache.get(email)
+        
+        if not cached_data:
+            raise HTTPException(status_code=400, detail="Código no encontrado o expirado. Inicia el registro nuevamente.")
+
+        # Verificar intentos
+        if cached_data["attempts"] >= 3:
+            del verification_cache[email]
+            raise HTTPException(status_code=400, detail="Demasiados intentos fallidos. Inicia el registro nuevamente.")
+
+        # Verificar código
+        if cached_data["code"] != code:
+            cached_data["attempts"] += 1
+            remaining_attempts = 3 - cached_data["attempts"]
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Código incorrecto. Te quedan {remaining_attempts} intentos."
+            )
+
+        # Verificar JWT
+        token_data = verify_verification_token(cached_data["token"])
+        if not token_data:
+            del verification_cache[email]
+            raise HTTPException(status_code=400, detail="Token expirado. Inicia el registro nuevamente.")
+
+        # Verificar que los datos coincidan
+        if token_data["email"] != email or token_data["code"] != code:
+            del verification_cache[email]
+            raise HTTPException(status_code=400, detail="Datos de verificación inválidos.")
+
+        # Crear usuario
+        nuevo_usuario = Usuario(
+            email=email,
+            nickname=cached_data["nickname"]
+        )
+        
+        db.add(nuevo_usuario)
+        db.commit()
+        db.refresh(nuevo_usuario)
+
+        # Limpiar cache
+        del verification_cache[email]
+
+        return {
+            "message": "Registro completado exitosamente",
+            "usuario": {
+                "id_user": nuevo_usuario.id_user,
+                "email": nuevo_usuario.email,
+                "nickname": nuevo_usuario.nickname,
+                "created_date": nuevo_usuario.created_date
+            },
+            "next_steps": [
+                "Puedes iniciar sesiones directamente",
+                "Usa tu nickname para identificar tus actividades"
+            ]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al completar el registro: {str(e)}")
+
+@router.post("/auth/resend-code")
+def reenviar_codigo(
+    email: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Reenvía el código de verificación"""
+    try:
+        cached_data = verification_cache.get(email)
+        
+        if not cached_data:
+            raise HTTPException(status_code=400, detail="No hay registro en progreso para este email.")
+
+        # Verificar si el JWT aún es válido
+        token_data = verify_verification_token(cached_data["token"])
+        if not token_data:
+            del verification_cache[email]
+            raise HTTPException(status_code=400, detail="Registro expirado. Inicia el proceso nuevamente.")
+
+        # Generar nuevo código
+        new_code = generate_verification_code()
+        
+        # Actualizar cache
+        cached_data["code"] = new_code
+        cached_data["attempts"] = 0
+        cached_data["created_at"] = datetime.now(timezone.utc)
+
+        # Reenviar email
+        background_tasks.add_task(send_verification_email, email, new_code)
+
+        return {
+            "message": "Nuevo código de verificación enviado",
+            "email": email,
+            "expires_in_minutes": VERIFICATION_EXPIRE_MINUTES
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al reenviar código: {str(e)}")
+
+@router.get("/auth/registration-status/{email}")
+def estado_registro(email: str):
+    """Consulta el estado del registro en progreso"""
+    cached_data = verification_cache.get(email)
+    
+    if not cached_data:
+        return {"status": "no_registration", "message": "No hay registro en progreso"}
+    
+    # Verificar si aún es válido
+    token_data = verify_verification_token(cached_data["token"])
+    if not token_data:
+        del verification_cache[email]
+        return {"status": "expired", "message": "Registro expirado"}
+    
+    expires_at = datetime.fromtimestamp(token_data["exp"], timezone.utc)
+    time_remaining = expires_at - datetime.now(timezone.utc)
+    minutes_remaining = max(0, int(time_remaining.total_seconds() / 60))
+    
+    return {
+        "status": "in_progress",
+        "email": email,
+        "nickname": cached_data["nickname"],
+        "attempts": cached_data["attempts"],
+        "minutes_remaining": minutes_remaining,
+        "expires_at": expires_at
+    }
+
+@router.post("/auth/forgot-username")
+def solicitar_recuperacion_usuario(
+    email: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Solicita la recuperación del username enviando un código de verificación"""
+    try:
+        # Verificar si el email existe en la base de datos
+        usuario = db.query(Usuario).filter(Usuario.email == email).first()
+        if not usuario:
+            # Por seguridad, no revelar si el email existe o no
+            return {
+                "message": "Si el email existe, se ha enviado un código de verificación",
+                "email": email
+            }
+
+        # Generar código de verificación
+        recovery_code = generate_verification_code()
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+        
+        # Guardar en cache
+        verification_cache[f"recovery_{email}"] = {
+            "code": recovery_code,
+            "expires_at": expires_at,
+            "user_id": usuario.id_user,
+            "attempts": 0,
+            "type": "username_recovery"
+        }
+
+        # Enviar código por email
+        background_tasks.add_task(send_recovery_email, email, recovery_code, usuario.nickname)
+
+        return {
+            "message": "Si el email existe, se ha enviado un código de verificación",
+            "email": email,
+            "expires_in_minutes": 10
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al procesar solicitud: {str(e)}")
+
+@router.post("/auth/verify-recovery")
+def verificar_recuperacion_usuario(
+    email: str,
+    code: str,
+    db: Session = Depends(get_db)
+):
+    """Verifica el código de recuperación y devuelve el username"""
+    try:
+        cache_key = f"recovery_{email}"
+        cached_data = verification_cache.get(cache_key)
+        
+        if not cached_data:
+            raise HTTPException(status_code=400, detail="Código no encontrado o expirado")
+
+        # Verificar tipo
+        if cached_data.get("type") != "username_recovery":
+            raise HTTPException(status_code=400, detail="Solicitud inválida")
+
+        # Verificar intentos
+        if cached_data["attempts"] >= 3:
+            del verification_cache[cache_key]
+            raise HTTPException(status_code=400, detail="Demasiados intentos fallidos")
+
+        # Verificar expiración
+        if datetime.now(timezone.utc) > cached_data["expires_at"]:
+            del verification_cache[cache_key]
+            raise HTTPException(status_code=400, detail="Código expirado")
+
+        # Verificar código
+        if cached_data["code"] != code:
+            cached_data["attempts"] += 1
+            remaining_attempts = 3 - cached_data["attempts"]
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Código incorrecto. Te quedan {remaining_attempts} intentos."
+            )
+
+        usuario = db.query(Usuario).filter(Usuario.id_user == cached_data["user_id"]).first()
+        if not usuario:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        send_username_reminder_email(email, usuario.nickname)
+
+        del verification_cache[cache_key]
+
+        return {
+            "message": "Se ha enviado un recordatorio de tu username a tu email",
+            "email": email
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al verificar recuperación: {str(e)}")
+
+@router.get("/auth/recovery-status/{email}")
+def estado_recuperacion(email: str):
+    """Consulta el estado de la recuperación"""
+    cache_key = f"recovery_{email}"
+    cached_data = verification_cache.get(cache_key)
+    
+    if not cached_data:
+        return {"status": "no_recovery", "message": "No hay recuperación en progreso"}
+    
+    if datetime.now(timezone.utc) > cached_data["expires_at"]:
+        del verification_cache[cache_key]
+        return {"status": "expired", "message": "Recuperación expirada"}
+    
+    expires_at = cached_data["expires_at"]
+    time_remaining = expires_at - datetime.now(timezone.utc)
+    minutes_remaining = max(0, int(time_remaining.total_seconds() / 60))
+    
+    return {
+        "status": "in_progress",
+        "email": email,
+        "type": cached_data.get("type", "unknown"),
+        "attempts": cached_data["attempts"],
+        "minutes_remaining": minutes_remaining
+    }
 
 # ============================================================
 # ENDPOINTS PARA SESIONES

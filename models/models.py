@@ -2,12 +2,14 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Chec
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from utils.database import Base
+from datetime import datetime, timezone
 
 class Usuario(Base):
     __tablename__ = 'tbl_users'
     
     id_user = Column(Integer, primary_key=True, autoincrement=True, index=True)
     nickname = Column(String(50), nullable=False, unique=True)
+    email = Column(String(100), nullable=False, unique=True)
     created_date = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relación con sesiones 
