@@ -4,6 +4,8 @@ from sqlalchemy import func
 from typing import List
 from datetime import datetime, timezone
 from schemas.shemas import UsuarioInput, UsuarioOutput, UsuarioResponse
+from models.models import PomodoroCreateRequest
+from models.models import PomodoroCreateRequest, PomodoroUpdateRequest
 
 from utils.database import get_db
 from models.models import Usuario, Sesion, Pomodoro, PomodoroRule, PomodoroType, PauseTracker
@@ -129,9 +131,9 @@ def listar_sesiones_usuario(id_user: int, db: Session = Depends(get_db)):
         return [{
             "id_session": s.id_session,
             "session_name": s.session_name,
-            "total_focus_minutes": s.total_focus_minutes,
-            "total_break_minutes": s.total_break_minutes,
-            "total_pause_minutes": s.total_pause_minutes,
+            "total_focus_seconds": s.total_focus_seconds,
+            "total_break_seconds": s.total_break_seconds,
+            "total_pause_seconds": s.total_pause_seconds,
             "created_date": s.created_date
         } for s in sesiones]
     except Exception as e:
@@ -142,13 +144,13 @@ def listar_sesiones_usuario(id_user: int, db: Session = Depends(get_db)):
         if not sesion:
             raise HTTPException(status_code=404, detail="Sesión no encontrada")
         
-        sesion.total_break_minutes += minutos
+        sesion.total_break_seconds += minutos
         db.commit()
         
         return {
             "message": "Total de minutos de descanso actualizado exitosamente",
             "id_session": sesion.id_session,
-            "total_break_minutes": sesion.total_break_minutes
+            "total_break_seconds": sesion.total_break_seconds
         }
     except HTTPException:
         raise
@@ -234,11 +236,11 @@ def completar_pomodoro(id_pomodoro_detail: int, db: Session = Depends(get_db)):
         
         sesion = db.query(Sesion).filter(Sesion.id_session == pomodoro.id_session).first()
         if pomodoro.event_type == "focus":
-            sesion.total_focus_minutes += pomodoro.planned_duration
+            sesion.total_focus_seconds += pomodoro.planned_duration
         elif pomodoro.event_type == "break":
-            sesion.total_break_minutes += pomodoro.planned_duration
+            sesion.total_break_seconds += pomodoro.planned_duration
         elif pomodoro.event_type == "pause":
-            sesion.total_pause_minutes += pomodoro.planned_duration
+            sesion.total_pause_seconds += pomodoro.planned_duration
         
         db.commit()
         
@@ -262,14 +264,16 @@ def listar_pomodoros_sesion(id_session: int, db: Session = Depends(get_db)):
     try:
         pomodoros = db.query(Pomodoro).filter(Pomodoro.id_session == id_session).all()
         return [{
-            "id_pomodoro_detail": p.id_pomodoro_detail,
+           "id_pomodoro_detail": p.id_pomodoro_detail,
             "id_pomodoro_rule": p.id_pomodoro_rule,
             "id_pomodoro_type": p.id_pomodoro_type,
             "event_type": p.event_type,
             "planned_duration": p.planned_duration,
             "is_completed": p.is_completed,
             "notes": p.notes,
-            "created_date": p.created_date
+            "created_date": p.created_date,
+            "focus_time": p.focus_time,
+            "break_time": p.break_time
         } for p in pomodoros]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener pomodoros: {str(e)}")
@@ -281,19 +285,74 @@ def actualizar_total_pause(id_session: int, minutos: int, db: Session = Depends(
         if not sesion:
             raise HTTPException(status_code=404, detail="Sesión no encontrada")
         
-        sesion.total_pause_minutes += minutos
+        sesion.total_pause_seconds += minutos
         db.commit()
         
         return {
             "message": "Total de minutos de pausa actualizado exitosamente",
             "id_session": sesion.id_session,
-            "total_pause_minutes": sesion.total_pause_minutes
+            "total_pause_seconds": sesion.total_pause_seconds,
+            "focus_time": p.focus_time,
+            "break_time": p.break_time
         }
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al actualizar total de pausa: {str(e)}")
+
+@router.post("/pomodoros/crear")
+def crear_pomodoro(data: PomodoroCreateRequest, db: Session = Depends(get_db)):
+    try:
+        sesion = db.query(Sesion).filter_by(id_session=data.id_session).first()
+        if not sesion:
+            raise HTTPException(status_code=404, detail="Sesión no encontrada")
+
+        nuevo_pomodoro = Pomodoro(
+            id_session=data.id_session,
+            id_pomodoro_rule=data.id_pomodoro_rule,
+            id_pomodoro_type=data.id_pomodoro_type,
+            event_type=data.event_type,
+            planned_duration=data.planned_duration,
+            focus_time=0,
+            break_time=0,
+            is_completed=False,
+            notes=data.notes or None
+        )
+
+        db.add(nuevo_pomodoro)
+        db.commit()
+        db.refresh(nuevo_pomodoro)
+
+        return {"id_pomodoro_detail": nuevo_pomodoro.id_pomodoro_detail}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al crear pomodoro: {str(e)}")
+
+@router.put("/pomodoros/{id_pomodoro_detail}")
+def actualizar_pomodoro(id_pomodoro_detail: int, data: PomodoroUpdateRequest, db: Session = Depends(get_db)):
+    try:
+        pomodoro = db.query(Pomodoro).filter_by(id_pomodoro_detail=id_pomodoro_detail).first()
+        if not pomodoro:
+            raise HTTPException(status_code=404, detail="Pomodoro no encontrado")
+
+        pomodoro.is_completed = data.is_completed
+        pomodoro.notes = data.notes
+        pomodoro.focus_time = data.focus_seconds       
+        pomodoro.break_time = data.break_seconds    
+
+        sesion = db.query(Sesion).filter_by(id_session=pomodoro.id_session).first()
+        if sesion:
+            sesion.total_focus_seconds += data.focus_seconds
+            sesion.total_break_seconds += data.break_seconds
+
+        db.commit()
+        db.refresh(pomodoro)
+
+        return {"message": "Pomodoro y sesión actualizados correctamente"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al actualizar pomodoro: {str(e)}")
 
 # ============================================================
 # ENDPOINTS PARA PAUSAS
@@ -341,14 +400,14 @@ def finalizar_pausa(id_pause: int, db: Session = Depends(get_db)):
         
         tiempo_actual = datetime.now(timezone.utc)
         tiempo_transcurrido = tiempo_actual - pausa.pause_start
-        minutos_pausa = int(tiempo_transcurrido.total_seconds() / 60)
+        minutos_pausa = int(tiempo_transcurrido.total_seconds())
         
         pausa.pause_end = tiempo_actual
-        pausa.total_pause_minutes = minutos_pausa
+        pausa.total_pause_seconds = minutos_pausa
         
         pomodoro = db.query(Pomodoro).filter(Pomodoro.id_pomodoro_detail == pausa.id_pomodoro_detail).first()
         sesion = db.query(Sesion).filter(Sesion.id_session == pomodoro.id_session).first()
-        sesion.total_pause_minutes += minutos_pausa
+        sesion.total_pause_seconds += minutos_pausa
         
         db.commit()
         
@@ -356,7 +415,7 @@ def finalizar_pausa(id_pause: int, db: Session = Depends(get_db)):
             "message": "Pausa finalizada exitosamente",
             "pausa": {
                 "id_pause": pausa.id_pause,
-                "total_pause_minutes": pausa.total_pause_minutes,
+                "total_pause_seconds": pausa.total_pause_seconds,
                 "pause_start": pausa.pause_start,
                 "pause_end": pausa.pause_end
             }
@@ -405,19 +464,19 @@ def obtener_estadisticas_usuario(id_user: int, db: Session = Depends(get_db)):
     try:
         
         total_focus = db.query(
-            func.sum(Sesion.total_focus_minutes).label('total_focus')
+            func.sum(Sesion.total_focus_seconds).label('total_focus')
         ).filter(
             Sesion.id_user == id_user
         ).scalar() or 0
         
         total_break = db.query(
-            func.sum(Sesion.total_break_minutes).label('total_break')
+            func.sum(Sesion.total_break_seconds).label('total_break')
         ).filter(
             Sesion.id_user == id_user
         ).scalar() or 0
         
         total_pause = db.query(
-            func.sum(Sesion.total_pause_minutes).label('total_pause')
+            func.sum(Sesion.total_pause_seconds).label('total_pause')
         ).filter(
             Sesion.id_user == id_user
         ).scalar() or 0
@@ -433,9 +492,9 @@ def obtener_estadisticas_usuario(id_user: int, db: Session = Depends(get_db)):
         
         return {
             "id_user": id_user,
-            "total_focus_minutes": total_focus,
-            "total_break_minutes": total_break,
-            "total_pause_minutes": total_pause,
+            "total_focus_seconds": total_focus,
+            "total_break_seconds": total_break,
+            "total_pause_seconds": total_pause,
             "total_sesiones": total_sesiones,
             "total_pomodoros_completados": total_pomodoros
         }
