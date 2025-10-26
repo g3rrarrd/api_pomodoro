@@ -3,6 +3,8 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from utils.database import Base
 from datetime import datetime, timezone
+from pydantic import BaseModel
+from typing import Optional
 
 class Usuario(Base):
     __tablename__ = 'tbl_users'
@@ -21,9 +23,9 @@ class Sesion(Base):
     id_session = Column(Integer, primary_key=True, autoincrement=True, index=True)
     id_user = Column(Integer, ForeignKey('tbl_users.id_user', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
     session_name = Column(String(100), nullable=False)
-    total_focus_minutes = Column(Integer, default=0)
-    total_break_minutes = Column(Integer, default=0)
-    total_pause_minutes = Column(Integer, default=0)
+    total_focus_seconds = Column(Integer, default=0)
+    total_break_seconds = Column(Integer, default=0)
+    total_pause_seconds = Column(Integer, default=0)
     created_date = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relaciones 
@@ -62,6 +64,8 @@ class Pomodoro(Base):
     event_type = Column(String(20), nullable=False) 
     planned_duration = Column(Integer, nullable=False)
     is_completed = Column(Boolean, default=False)
+    focus_time = Column(Integer, default=0)
+    break_time = Column(Integer, default=0)
     notes = Column(Text, nullable=True)
     created_date = Column(DateTime(timezone=True), server_default=func.now())
     
@@ -85,8 +89,23 @@ class PauseTracker(Base):
     id_pomodoro_detail = Column(Integer, ForeignKey('tbl_pomodoro_details.id_pomodoro_detail', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
     pause_start = Column(DateTime(timezone=True), nullable=False)
     pause_end = Column(DateTime(timezone=True), nullable=True)
-    total_pause_minutes = Column(Integer, default=0)
+    total_pause_seconds = Column(Integer, default=0)
     created_date = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relación 
     pomodoro = relationship("Pomodoro", back_populates="pauses")
+
+class PomodoroCreateRequest(BaseModel):
+    id_session: int
+    id_pomodoro_rule: int
+    id_pomodoro_type: int
+    event_type: str 
+    planned_duration: int
+    is_completed: bool = False
+    notes: Optional[str] = None
+
+class PomodoroUpdateRequest(BaseModel):
+    is_completed: bool
+    notes: str
+    focus_seconds: int = 0
+    break_seconds: int = 0
