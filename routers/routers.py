@@ -13,6 +13,7 @@ from utils.auth_utils import (
     send_username_reminder_email
 )
 from models.models import PomodoroCreateRequest, PomodoroUpdateRequest
+from utils.validate import validar_string
 
 router = APIRouter()
 
@@ -104,7 +105,10 @@ def iniciar_registro(
 ):
     """Inicia el proceso de registro enviando código de verificación"""
     try:
-        # Validaciones básicas
+
+        validar_string(nickname)
+        validar_string(email)
+
         if not email or "@" not in email:
             raise HTTPException(status_code=400, detail="Email inválido")
         
@@ -427,6 +431,8 @@ def estado_recuperacion(email: str):
 @router.post("/sesiones/")
 def crear_sesion(id_user: int, session_name: str, db: Session = Depends(get_db)):
     try:
+        validar_string(session_name)
+
         usuario = db.query(Usuario).filter(Usuario.id_user == id_user).first()
         if not usuario:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
