@@ -441,6 +441,7 @@ def crear_sesion(id_user: int, session_name: str, db: Session = Depends(get_db))
             id_user=id_user,
             session_name=session_name
         )
+        
         db.add(nueva_sesion)
         db.commit()
         db.refresh(nueva_sesion)

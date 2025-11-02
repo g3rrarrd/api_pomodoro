@@ -14,16 +14,13 @@ load_dotenv()
 
 origins = os.getenv("ALLOWED_ORIGINS", "")
 
-### Descomentar la siguiente línea para eliminar todas las tablas (¡CUIDADO!)
-Base.metadata.drop_all(bind=engine)
-
 ### Crear las tablas en la base de datos si no existen
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Pomodoro API",
     description="API para gestión de técnica Pomodoro con seguimiento detallado",
-    version="0.6.0"
+    version="1.0.1"
 )
 
 app.include_router(router)
@@ -40,7 +37,7 @@ app.add_middleware(
 def read_root():
     return {
         "message": "Bienvenido a Pomodoro API",
-        "version": "0.6.0",
+        "version": "1.0.1",
         "description": "Sistema de productividad con técnica Pomodoro"
     }
 
@@ -56,7 +53,7 @@ def health_check():
 def get_info():
     return {
         "name": "Pomodoro API",
-        "version": "0.5.1",
+        "version": "1.0.1",
         "models": [
             "Usuario", "Sesion", "Pomodoro", 
             "PomodoroRule", "PomodoroType", "PauseTracker"
