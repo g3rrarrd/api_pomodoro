@@ -12,16 +12,30 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
 origins = os.getenv("ALLOWED_ORIGINS", "")
 
 ### Crear las tablas en la base de datos si no existen
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(
-    title="Pomodoro API",
-    description="API para gestión de técnica Pomodoro con seguimiento detallado",
-    version="1.0.1"
-)
+
+app_kwargs = {
+    "title": "Pomodoro API",
+    "description": "API para gestión de técnica Pomodoro con seguimiento detallado",
+    "version": "1.0.3"
+}
+
+
+if ENVIRONMENT == "production":
+    print("Iniciando en modo PRODUCCIÓN: Documentación (Swagger/ReDoc) desactivada.")
+    app_kwargs["docs_url"] = None  # Desactiva /docs
+    app_kwargs["redoc_url"] = None # Desactiva /redoc
+else:
+    print("Iniciando en modo DESARROLLO: Documentación (Swagger/ReDoc) activada.")
+
+
+app = FastAPI(**app_kwargs)
 
 app.include_router(router)
 
@@ -37,7 +51,7 @@ app.add_middleware(
 def read_root():
     return {
         "message": "Bienvenido a Pomodoro API",
-        "version": "1.0.1",
+        "version": "1.0.3",
         "description": "Sistema de productividad con técnica Pomodoro"
     }
 
@@ -53,7 +67,7 @@ def health_check():
 def get_info():
     return {
         "name": "Pomodoro API",
-        "version": "1.0.1",
+        "version": "1.0.3",
         "models": [
             "Usuario", "Sesion", "Pomodoro", 
             "PomodoroRule", "PomodoroType", "PauseTracker"

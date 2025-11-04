@@ -9,7 +9,7 @@ az login
 az acr login --name acrpomodoro
 
 docker tag pomodoro-api:latest acrpomodoro.azurecr.io/pomodoro-api:latest
-docker tag pomodoro-api:latest acrpomodoro.azurecr.io/pomodoro-api:1.0.1
+docker tag pomodoro-api:latest acrpomodoro.azurecr.io/pomodoro-api:1.0.2
 
 docker push acrpomodoro.azurecr.io/pomodoro-api:latest
-docker push acrpomodoro.azurecr.io/pomodoro-api:1.0.1
+docker push acrpomodoro.azurecr.io/pomodoro-api:1.0.2

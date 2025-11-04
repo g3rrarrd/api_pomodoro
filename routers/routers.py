@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
 from datetime import datetime, timezone, timedelta
+from pydantic import BaseModel
 
 from utils.database import get_db
 from models.models import Usuario, Sesion, Pomodoro, PomodoroRule, PomodoroType, PauseTracker
@@ -95,19 +96,23 @@ def obtener_usuario_por_email(email: str, db: Session = Depends(get_db)):
 # ENDPOINTS DE VERIFICACION
 # ============================================================
 
+class StartRegistrationRequest(BaseModel):
+    email: str
+    nickname: str
+
 @router.post("/auth/start-registration")
 def iniciar_registro(
-    request: Request,
-    email: str,
-    nickname: str,
+    data: StartRegistrationRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """Inicia el proceso de registro enviando código de verificación"""
     try:
+        email = data.email
+        nickname = data.nickname
 
-        validar_string(nickname)
-        validar_string(email)
+        validar_string(nickname, "nickname")
+        validar_string(email, "email")
 
         if not email or "@" not in email:
             raise HTTPException(status_code=400, detail="Email inválido")
@@ -115,20 +120,16 @@ def iniciar_registro(
         if not nickname or len(nickname) < 2:
             raise HTTPException(status_code=400, detail="Nickname debe tener al menos 2 caracteres")
 
-        # Verificar si el email ya está registrado
         usuario_existente = db.query(Usuario).filter(Usuario.email == email).first()
         if usuario_existente:
             raise HTTPException(status_code=400, detail="El email ya está registrado")
 
-        # Verificar si el nickname ya está en uso
         nickname_existente = db.query(Usuario).filter(Usuario.nickname == nickname).first()
         if nickname_existente:
             raise HTTPException(status_code=400, detail="El nickname ya está en uso")
 
-        # Generar código de verificación
         verification_code = generate_verification_code()
-        
-        # Crear JWT temporal con los datos del usuario
+
         verification_data = {
             "email": email,
             "nickname": nickname,
@@ -137,8 +138,7 @@ def iniciar_registro(
         }
         
         verification_token = create_verification_token(verification_data)
-        
-        # Guardar en cache para verificación rápida
+
         verification_cache[email] = {
             "token": verification_token,
             "code": verification_code,
@@ -147,14 +147,12 @@ def iniciar_registro(
             "attempts": 0
         }
 
-        # Enviar código por email (en background)
         background_tasks.add_task(send_verification_email, email, verification_code)
 
         return {
             "message": "Código de verificación enviado a tu email",
             "email": email,
-            "expires_in_minutes": VERIFICATION_EXPIRE_MINUTES,
-            "note": "Usa este código para completar el registro en /auth/verify"
+            "expires_in_minutes": VERIFICATION_EXPIRE_MINUTES
         }
 
     except HTTPException:
@@ -162,14 +160,19 @@ def iniciar_registro(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al iniciar registro: {str(e)}")
 
+class CompleteRegistrationRequest(BaseModel):
+    email: str
+    code: str
+
 @router.post("/auth/verify")
 def verificar_y_registrar(
-    email: str,
-    code: str,
+    data: CompleteRegistrationRequest,
     db: Session = Depends(get_db)
 ):
     """Verifica el código y crea el usuario"""
     try:
+        email = data.email
+        code = data.code
         # Buscar en cache
         cached_data = verification_cache.get(email)
         
@@ -234,14 +237,18 @@ def verificar_y_registrar(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al completar el registro: {str(e)}")
 
+class ResendCodeRequest(BaseModel):
+    email: str
+
 @router.post("/auth/resend-code")
 def reenviar_codigo(
-    email: str,
+    data: ResendCodeRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """Reenvía el código de verificación"""
     try:
+        email = data.email
         cached_data = verification_cache.get(email)
         
         if not cached_data:
@@ -302,14 +309,18 @@ def estado_registro(email: str):
         "expires_at": expires_at
     }
 
+class ForgotUsernameRequest(BaseModel):
+    email: str
+
 @router.post("/auth/forgot-username")
 def solicitar_recuperacion_usuario(
-    email: str,
+    data: ForgotUsernameRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """Solicita la recuperación del username enviando un código de verificación"""
     try:
+        email = data.email
         # Verificar si el email existe en la base de datos
         usuario = db.query(Usuario).filter(Usuario.email == email).first()
         if not usuario:
@@ -344,14 +355,19 @@ def solicitar_recuperacion_usuario(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al procesar solicitud: {str(e)}")
 
+class VerifyRecoveryRequest(BaseModel):
+    email: str
+    code: str
+
 @router.post("/auth/verify-recovery")
 def verificar_recuperacion_usuario(
-    email: str,
-    code: str,
+    data: VerifyRecoveryRequest,
     db: Session = Depends(get_db)
 ):
     """Verifica el código de recuperación y devuelve el username"""
     try:
+        email = data.email
+        code = data.code
         cache_key = f"recovery_{email}"
         cached_data = verification_cache.get(cache_key)
         
@@ -427,11 +443,17 @@ def estado_recuperacion(email: str):
 # ============================================================
 # ENDPOINTS PARA SESIONES
 # ============================================================
+class CrearSesionRequest(BaseModel):
+    id_user: int
+    session_name: str
 
 @router.post("/sesiones/")
-def crear_sesion(id_user: int, session_name: str, db: Session = Depends(get_db)):
+def crear_sesion(data: CrearSesionRequest, db: Session = Depends(get_db)):
     try:
-        validar_string(session_name)
+        id_user = data.id_user
+        session_name = data.session_name
+    
+        validar_string(session_name,"session_name")
 
         usuario = db.query(Usuario).filter(Usuario.id_user == id_user).first()
         if not usuario:
@@ -542,6 +564,8 @@ def actualizar_total_pause(id_session: int, segundos: int, db: Session = Depends
 # ============================================================
 # ENDPOINTS PARA POMODOROS
 # ============================================================
+
+
 
 @router.post("/pomodoros/")
 def iniciar_pomodoro(
