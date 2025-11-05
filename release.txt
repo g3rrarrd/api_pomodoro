@@ -7,7 +7,7 @@
 ######################################################################
 
 # --- Config ---
-VERSION=1.0.3
+VERSION=1.0.4
 ACR_PRD=prodpomodoroacr
 IMAGE_LOCAL=pomodoro-api
 REPO_PROD=${ACR_PRD}.azurecr.io/pomodoro-api

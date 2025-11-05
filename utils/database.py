@@ -18,7 +18,7 @@ else:
     server_host = f"{server}.database.windows.net"
 
 params = urllib.parse.quote_plus(
-    f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+    f"DRIVER={driver};"
     f"SERVER=tcp:{server_host},1433;"
     f"DATABASE={database};"
     f"UID={username};"

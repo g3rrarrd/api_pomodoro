@@ -23,7 +23,7 @@ Base.metadata.create_all(bind=engine)
 app_kwargs = {
     "title": "Pomodoro API",
     "description": "API para gestión de técnica Pomodoro con seguimiento detallado",
-    "version": "1.0.3"
+    "version": "1.0.4"
 }
 
 
@@ -51,7 +51,7 @@ app.add_middleware(
 def read_root():
     return {
         "message": "Bienvenido a Pomodoro API",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "description": "Sistema de productividad con técnica Pomodoro"
     }
 
