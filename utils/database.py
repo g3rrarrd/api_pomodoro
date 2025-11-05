@@ -10,6 +10,7 @@ server = os.getenv("DB_SERVER")
 database = os.getenv("DB_NAME")
 username = os.getenv("DB_USER")
 password = os.getenv("DB_PASS")
+driver = os.getenv("DB_DRIVER")
 
 if server and '.database.windows.net' in server:
     server_host = server
